@@ -3,6 +3,7 @@ use redis_ts::{TsCommands, TsOptions, TsDuplicatePolicy, TsRange, TsRangeQuery, 
 use std::thread;
 use std::time::{Duration, SystemTime};
 use sysinfo::{System, RefreshKind, CpuRefreshKind};
+use chrono::{Utc, TimeZone};
 
 fn main() {
     // Connect to the Redis server
@@ -35,6 +36,9 @@ fn main() {
 	
 	// Print all CPU usage in the end
 	print_cpu_usage(&mut con);
+
+	let info:TsInfo = con.ts_info("cpu_usage").unwrap();
+	println!("Samples:{} - Memory:{}", info.total_samples, info.memory_usage);
 }
 
 fn print_cpu_usage(con: &mut redis::Connection) {
@@ -45,7 +49,12 @@ fn print_cpu_usage(con: &mut redis::Connection) {
 
     // Print the data
     for entry in data.values {
-        println!("{}: {}", entry.0, entry.1);
+        // Convert the timestamp into a DateTime object
+        let datetime = Utc.timestamp(entry.0 as i64, 0);
+        // Convert the DateTime object into a string
+        let date_string = datetime.to_rfc3339();
+
+        println!("{}: {}", date_string, entry.1);
     }
 }
 
@@ -66,8 +75,6 @@ fn update_cpu_usage(con: &mut redis::Connection) {
 		cpu_usage += cpu.cpu_usage();
 	}
 	cpu_usage /= s.cpus().len() as f32;
-	//make a i32 type for redis
-	let cpu_usage_i: i32 = (cpu_usage * 100.0) as i32;
 
 	// Get the current timestamp
 	// let timestamp = SystemTime::now()
@@ -75,8 +82,6 @@ fn update_cpu_usage(con: &mut redis::Connection) {
 	// .as_secs() as i64;
 
 	// Store the CPU usage in Redis
-	let _:() = con.ts_add_now("cpu_usage", cpu_usage_i).expect("REASON");
+	let _:() = con.ts_add_now("cpu_usage", cpu_usage).expect("REASON");
 
-	// Sleep for 1 second
-	thread::sleep(Duration::from_millis(1));
 }
